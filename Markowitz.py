@@ -66,12 +66,16 @@ class EqualWeightPortfolio:
         """
         TODO: Complete Task 1 Below
         """
+        equal_weight = 1 / len(assets)
+        #for asset in assets:
+        self.portfolio_weights[assets] = equal_weight
 
+        self.portfolio_weights[self.exclude] = 0
         """
         TODO: Complete Task 1 Above
         """
-        self.portfolio_weights.ffill(inplace=True)
-        self.portfolio_weights.fillna(0, inplace=True)
+        # self.portfolio_weights.ffill(inplace=True)
+        # self.portfolio_weights.fillna(0, inplace=True)
 
     def calculate_portfolio_returns(self):
         # Ensure weights are calculated
@@ -122,8 +126,22 @@ class RiskParityPortfolio:
         TODO: Complete Task 2 Above
         """
 
+
+        # Calculate the rolling volatility (standard deviation) for each asset
+        shifted_returns = df_returns[assets].shift(1)
+        rolling_vol = shifted_returns[assets].rolling(window=self.lookback).std()
+
+        # Calculate the inverse of the volatility
+        inv_vol = 1 / rolling_vol
+
+        # Normalize the inverse volatilities to sum to 1
+        normalized_inv_vol = inv_vol.div(inv_vol.sum(axis=1), axis=0)
+
+        self.portfolio_weights[assets] = normalized_inv_vol
+
         self.portfolio_weights.ffill(inplace=True)
         self.portfolio_weights.fillna(0, inplace=True)
+        self.portfolio_weights[0:51] = 0
 
     def calculate_portfolio_returns(self):
         # Ensure weights are calculated
@@ -193,11 +211,18 @@ class MeanVariancePortfolio:
                 # Sample Code: Initialize Decision w and the Objective
                 # NOTE: You can modify the following code
                 w = model.addMVar(n, name="w", ub=1)
-                model.setObjective(w.sum(), gp.GRB.MAXIMIZE)
+                
+                # Objective: Maximize w.T @ mu - (gamma / 2) * w.T @ Sigma @ w
+                portfolio_return = mu @ w
+                portfolio_variance = w @ Sigma @ w
+                model.setObjective(portfolio_return - (gamma / 2) * portfolio_variance, gp.GRB.MAXIMIZE)
+                
+                # Constraint: Sum of weights = 1
+                model.addConstr(w.sum() == 1, name="sum_weights")
+                
+                # Constraint: Weights are non-negative
+                model.addConstr(w >= 0, name="non_negative")
 
-                """
-                TODO: Complete Task 3 Below
-                """
                 model.optimize()
 
                 # Check if the status is INF_OR_UNBD (code 4)
@@ -401,6 +426,8 @@ class AssignmentJudge:
 
     def check_answer_rp(self, rp_dataframe):
         answer_dataframe = pd.read_pickle(self.rp_path)
+        # print(answer_dataframe.to_markdown())
+        # print(rp_dataframe.to_markdown())
         if self.compare_dataframe(answer_dataframe, rp_dataframe):
             print("Problem 2 Complete - Get 10 Points")
             return 10

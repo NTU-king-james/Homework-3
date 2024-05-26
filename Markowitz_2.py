@@ -75,6 +75,37 @@ class MyPortfolio:
         TODO: Complete Task 4 Below
         """
 
+        for current_date in self.price.index[self.lookback:]:
+            # Select the data for the lookback period
+            lookback_data = self.returns.loc[:current_date].iloc[-self.lookback:]
+            lookback_cov = lookback_data[assets].cov()
+
+            # Initialize the Gurobi model
+            m = gp.Model()
+
+            # Add a variable for each asset's weight in the portfolio
+            weights = m.addVars(assets, lb=0, ub=1, name="weights")
+
+            # Set the objective to minimize the difference between each asset's risk contribution and the average risk contribution
+            avg_risk_contrib = 1 / len(assets)
+            risk_contrib = {
+                asset: weights[asset] * gp.quicksum(lookback_cov.loc[asset, j] * weights[j] for j in assets)
+                for asset in assets
+            }
+
+            obj = gp.quicksum((risk_contrib[asset] - avg_risk_contrib) * (risk_contrib[asset] - avg_risk_contrib) for asset in assets)
+            m.setObjective(obj, gp.GRB.MINIMIZE)
+
+            # Add the constraint that the weights sum to 1
+            m.addConstr(gp.quicksum(weights) == 1, name="weights_sum")
+
+            # Optimize the model
+            m.optimize()
+
+            # Store the optimized weights
+            for asset in assets:
+                self.portfolio_weights.loc[current_date, asset] = weights[asset].X
+
         """
         TODO: Complete Task 4 Above
         """
